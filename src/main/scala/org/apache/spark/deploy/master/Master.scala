@@ -148,6 +148,7 @@ private[deploy] class Master(
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
     checkForWorkerTimeOutTask = forwardMessageThread.scheduleAtFixedRate(new Runnable {
       override def run(): Unit = Utils.tryLogNonFatalError {
+        //TODO master继承了RpcEndpointRef
         self.send(CheckForWorkerTimeOut)
       }
     }, 0, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
@@ -167,6 +168,7 @@ private[deploy] class Master(
     applicationMetricsSystem.getServletHandlers.foreach(webUi.attachHandler)
 
     val serializer = new JavaSerializer(conf)
+
     val (persistenceEngine_, leaderElectionAgent_) = RECOVERY_MODE match {
       case "ZOOKEEPER" =>
         logInfo("Persisting recovery state to ZooKeeper")
@@ -183,6 +185,7 @@ private[deploy] class Master(
           .newInstance(conf, serializer)
           .asInstanceOf[StandaloneRecoveryModeFactory]
         (factory.createPersistenceEngine(), factory.createLeaderElectionAgent(this))
+      //TODO 初始化默认是NONE
       case _ =>
         (new BlackHolePersistenceEngine(), new MonarchyLeaderAgent(this))
     }
@@ -255,11 +258,11 @@ private[deploy] class Master(
         //TODO 注册 里面设置了 waitingApps
         registerApplication(app)
         logInfo("Registered app " + description.name + " with ID " + app.id)
-        //TODO 持久化引擎操作
+        //TODO 将driver信息持久化引擎操作
         persistenceEngine.addApplication(app)
-        //TODO 告诉ClientEndPoint 它注册的id,通信ref
+        //TODO master->ClientEndPoint 它注册的id,通信ref
         driver.send(RegisteredApplication(app.id, self))
-        //TODO 重要! master开始调度资源,其实就是把任务启动到worker上
+        //TODO 重中之重!!! master开始调度资源,其实就是把任务启动到worker上
         schedule()
       }
     }
@@ -385,6 +388,7 @@ private[deploy] class Master(
       logInfo(s"Received unregister request from application $applicationId")
       idToApp.get(applicationId).foreach(finishApplication)
 
+      //TODO master启动   master->master
     case CheckForWorkerTimeOut => {
       timeOutDeadWorkers()
     }
@@ -395,6 +399,7 @@ private[deploy] class Master(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    //TODO worker->master
     case RegisterWorker(
     id, workerHost, workerPort, workerRef, cores, memory, workerUiPort, publicAddress) => {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
@@ -406,9 +411,11 @@ private[deploy] class Master(
       } else {
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
           workerRef, workerUiPort, publicAddress)
+        //TODO
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
           context.reply(RegisteredWorker(self, masterWebUiUrl))
+          //TODO
           schedule()
         } else {
           val workerAddress = worker.endpoint.address
@@ -763,12 +770,13 @@ private[deploy] class Master(
       // explored all alive workers.
       var launched = false
       var numWorkersVisited = 0
-      //只要还有活着的work就继续遍历,这个driver还没有被启动,就是launched为false
+      //TODO 只要还有活着的work就继续遍历,当前这个driver还没有被启动,就是launched为false
       while (numWorkersVisited < numWorkersAlive && !launched) {
         val worker = shuffledAliveWorkers(curPos)
         numWorkersVisited += 1
-        //内存够,cpu够,才会启动driver.
+        //TODO 内存够,cpu够,才会启动driver.
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
+          //TODO
           launchDriver(worker, driver)
           //从缓存中移除
           waitingDrivers -= driver
@@ -831,6 +839,7 @@ private[deploy] class Master(
     addressToWorker -= worker.endpoint.address
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
+      //TODO  ???谁向谁发 executor->appClient
       exec.application.driver.send(ExecutorUpdated(
         exec.id, ExecutorState.LOST, Some("worker lost"), None))
       exec.application.removeExecutor(exec)
@@ -1097,8 +1106,10 @@ private[deploy] class Master(
   private def timeOutDeadWorkers() {
     // Copy the workers into an array so we don't modify the hashset while iterating through it
     val currentTime = System.currentTimeMillis()
+    //TODO 过滤出要remove掉的work
     val toRemove = workers.filter(_.lastHeartbeat < currentTime - WORKER_TIMEOUT_MS).toArray
     for (worker <- toRemove) {
+      //如果 需要过滤的work专题不是dead
       if (worker.state != WorkerState.DEAD) {
         logWarning("Removing %s because we got no heartbeat in %d seconds".format(
           worker.id, WORKER_TIMEOUT_MS / 1000))
@@ -1126,11 +1137,11 @@ private[deploy] class Master(
   //TODO 在某个worker上启动driver
   private def launchDriver(worker: WorkerInfo, driver: DriverInfo) {
     logInfo("Launching driver " + driver.id + " on worker " + worker.id)
-    //将driver加入到worker内存的缓存结构中
-    //将worker内使用的内存,cpu的用量,也对应的加上.
+    //TODO 将driver加入到worker内存的缓存结构中
+    //TODO 将worker内使用的内存,cpu的用量,也对应的加上.
     worker.addDriver(driver)
     driver.worker = Some(worker)
-    //发送消息让worker启动
+    //TODO 发送消息让worker启动driver
     worker.endpoint.send(LaunchDriver(driver.id, driver.desc))
     driver.state = DriverState.RUNNING
   }
@@ -1165,10 +1176,19 @@ private[deploy] object Master extends Logging {
   val SYSTEM_NAME = "sparkMaster"
   val ENDPOINT_NAME = "Master"
 
+  /**
+    *   TODO
+    * "${SPARK_HOME}/sbin"/spark-daemon.sh start $CLASS 1 \
+    * --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT \
+    * $ORIGINAL_ARGS
+    *
+    * @param argStrings
+    */
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
+    //TODO
     val (rpcEnv, _, _) = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, conf)
     rpcEnv.awaitTermination()
   }
@@ -1186,8 +1206,10 @@ private[deploy] object Master extends Logging {
                               conf: SparkConf): (RpcEnv, Int, Option[Int]) = {
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(SYSTEM_NAME, host, port, conf, securityMgr)
+    //TODO 注册masterEndpoint
     val masterEndpoint = rpcEnv.setupEndpoint(ENDPOINT_NAME,
       new Master(rpcEnv, rpcEnv.address, webUiPort, securityMgr, conf))
+    //TODO master的onStart()方法会在 masterEndpoint接受消息之前调用.
     val portsResponse = masterEndpoint.askWithRetry[BoundPortsResponse](BoundPortsRequest)
     (rpcEnv, portsResponse.webUIPort, portsResponse.restPort)
   }

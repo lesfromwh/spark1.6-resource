@@ -31,26 +31,26 @@ import org.apache.spark.util.logging.FileAppender
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
- * Manages the execution of one executor process.
- * This is currently only used in standalone mode.
- */
+  * Manages the execution of one executor process.
+  * This is currently only used in standalone mode.
+  */
 private[deploy] class ExecutorRunner(
-    val appId: String,
-    val execId: Int,
-    val appDesc: ApplicationDescription,
-    val cores: Int,
-    val memory: Int,
-    val worker: RpcEndpointRef,
-    val workerId: String,
-    val host: String,
-    val webUiPort: Int,
-    val publicAddress: String,
-    val sparkHome: File,
-    val executorDir: File,
-    val workerUrl: String,
-    conf: SparkConf,
-    val appLocalDirs: Seq[String],
-    @volatile var state: ExecutorState.Value)
+                                      val appId: String,
+                                      val execId: Int,
+                                      val appDesc: ApplicationDescription,
+                                      val cores: Int,
+                                      val memory: Int,
+                                      val worker: RpcEndpointRef,
+                                      val workerId: String,
+                                      val host: String,
+                                      val webUiPort: Int,
+                                      val publicAddress: String,
+                                      val sparkHome: File,
+                                      val executorDir: File,
+                                      val workerUrl: String,
+                                      conf: SparkConf,
+                                      val appLocalDirs: Seq[String],
+                                      @volatile var state: ExecutorState.Value)
   extends Logging {
 
   private val fullId = appId + "/" + execId
@@ -69,7 +69,10 @@ private[deploy] class ExecutorRunner(
   private[worker] def start() {
     //TODO 先创建一个线程对象,通过一个线程来启动executor子进程
     workerThread = new Thread("ExecutorRunner for " + fullId) {
-      override def run() { fetchAndRunExecutor() }
+      override def run() {
+        //TODO
+        fetchAndRunExecutor()
+      }
     }
     workerThread.start()
     // Shutdown hook that kills actors on shutdown.
@@ -79,14 +82,15 @@ private[deploy] class ExecutorRunner(
       if (state == ExecutorState.RUNNING) {
         state = ExecutorState.FAILED
       }
-      killProcess(Some("Worker shutting down")) }
+      killProcess(Some("Worker shutting down"))
+    }
   }
 
   /**
-   * Kill executor process, wait for exit and notify worker to update resource status.
-   *
-   * @param message the exception message which caused the executor's death
-   */
+    * Kill executor process, wait for exit and notify worker to update resource status.
+    *
+    * @param message the exception message which caused the executor's death
+    */
   private def killProcess(message: Option[String]) {
     var exitCode: Option[Int] = None
     if (process != null) {
@@ -137,8 +141,8 @@ private[deploy] class ExecutorRunner(
 
   /**
     * TODO
-   * Download and run the executor described in our ApplicationDescription
-   */
+    * Download and run the executor described in our ApplicationDescription
+    */
   private def fetchAndRunExecutor() {
     try {
       // Launch the process

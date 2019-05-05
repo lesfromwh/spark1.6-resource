@@ -160,6 +160,7 @@ private[spark] class AppClient(
     }
 
     override def receive: PartialFunction[Any, Unit] = {
+      //TODO master->client 告诉他 已经注册好了
       case RegisteredApplication(appId_, masterRef) =>
         // FIXME How to handle the following cases?
         // 1. A master receives multiple registrations and sends back multiple

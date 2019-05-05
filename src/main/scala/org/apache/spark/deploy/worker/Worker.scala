@@ -185,6 +185,7 @@ private[deploy] class Worker(
     shuffleService.startIfEnabled()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
+    //TODO 向master注册
     registerWithMaster()
 
     metricsSystem.registerSource(workerSource)
@@ -211,6 +212,7 @@ private[deploy] class Worker(
             logInfo("Connecting to master " + masterAddress + "...")
             val masterEndpoint =
               rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
+            //TODO
             registerWithMaster(masterEndpoint)
           } catch {
             case ie: InterruptedException => // Cancelled
@@ -320,6 +322,7 @@ private[deploy] class Worker(
     registrationRetryTimer match {
       case None =>
         registered = false
+        //TODO
         registerMasterFutures = tryRegisterAllMasters()
         connectionAttemptCount = 0
         registrationRetryTimer = Some(forwordMessageScheduler.scheduleAtFixedRate(
@@ -338,6 +341,7 @@ private[deploy] class Worker(
   }
 
   private def registerWithMaster(masterEndpoint: RpcEndpointRef): Unit = {
+    //TODO
     masterEndpoint.ask[RegisterWorkerResponse](RegisterWorker(
       workerId, host, port, self, cores, memory, webUi.boundPort, publicAddress))
       .onComplete {
@@ -428,7 +432,7 @@ private[deploy] class Worker(
       logInfo(s"Master with url $masterUrl requested this worker to reconnect.")
       registerWithMaster()
 
-      //TODO master发送的请求,启动executor
+      //TODO master->worker,启动executor
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
@@ -488,6 +492,7 @@ private[deploy] class Worker(
         }
       }
 
+      //executor->work
     case executorStateChanged @ ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
       handleExecutorStateChanged(executorStateChanged)
 
@@ -588,6 +593,7 @@ private[deploy] class Worker(
    */
   private def sendToMaster(message: Any): Unit = {
     master match {
+        //TODO worker->master
       case Some(masterRef) => masterRef.send(message)
       case None =>
         logWarning(
@@ -659,6 +665,7 @@ private[deploy] class Worker(
 
   private[worker] def handleExecutorStateChanged(executorStateChanged: ExecutorStateChanged):
     Unit = {
+    //TODO
     sendToMaster(executorStateChanged)
     val state = executorStateChanged.state
     if (ExecutorState.isFinished(state)) {
@@ -690,6 +697,7 @@ private[deploy] object Worker extends Logging {
   val SYSTEM_NAME = "sparkWorker"
   val ENDPOINT_NAME = "Worker"
 
+  //TODO
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
     val conf = new SparkConf

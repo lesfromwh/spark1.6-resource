@@ -59,6 +59,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
+      //TODO ask跟send有什么区别？  也是发消息 这里就是executor启动以后反向注册到driverendPoint上 (CoarseGrainedSchedulerBackend)
+      //TODO send用receive接受 ask用receiveAndReply接受
       ref.ask[RegisterExecutorResponse](
         RegisterExecutor(executorId, self, hostPort, cores, extractLogUrls))
     }(ThreadUtils.sameThread).onComplete {
@@ -199,6 +201,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val sparkHostPort = env.conf.getOption("spark.executor.port").map { port =>
           hostname + ":" + port
         }.orNull
+      //TODO
       env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
         env.rpcEnv, driverUrl, executorId, sparkHostPort, cores, userClassPath, env))
       workerUrl.foreach { url =>

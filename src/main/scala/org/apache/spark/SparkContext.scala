@@ -2640,6 +2640,7 @@ object SparkContext extends Logging {
         //TODO TaskScheduler的实现类封装进去.
         //TODO 程序后面会运行backend.start()   start()里面会创建一个driverActor
         val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
+        //TODO backend赋值到taskScheduler
         scheduler.initialize(backend)
         (backend, scheduler)
 
