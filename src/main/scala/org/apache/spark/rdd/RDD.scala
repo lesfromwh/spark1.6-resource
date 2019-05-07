@@ -908,6 +908,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Applies a function f to all elements of this RDD.
    */
+  //TODO
   def foreach(f: T => Unit): Unit = withScope {
     val cleanF = sc.clean(f)
     sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))

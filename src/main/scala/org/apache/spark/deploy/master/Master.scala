@@ -623,17 +623,26 @@ private[deploy] class Master(
                                           spreadOutApps: Boolean): Array[Int] = {
     //TODO 从application信息中获取该application所在executor需要的core数量
     val coresPerExecutor = app.desc.coresPerExecutor
+    //如果没有默认1
     val minCoresPerExecutor = coresPerExecutor.getOrElse(1)
+    // 如果我们没有指定executor需要分配的核数，则一个worker上只能启动一个executor
     val oneExecutorPerWorker = coresPerExecutor.isEmpty
+    //每个executor所需内存
     val memoryPerExecutor = app.desc.memoryPerExecutorMB
+    // 能用work的数量
     val numUsable = usableWorkers.length
+    // 构建一个长度为numUsable的数组，用于存放每个worker节点分配到的cpu核数(16,16,16,16)
     val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
+    // 构建一个长度为assignedCores的数组，用于存放每一个worker上新分配的executor数量(1,2,1,0)
     val assignedExecutors = new Array[Int](numUsable) // Number of new executors on each worker
-    //TODO 获取到底要分配多少cpu,取app剩余分配的cpu数量和worker总共可用cpu数量的最小值
+    //TODO 针对当前应用程序，还需要分配的cpu核数，它应该是application还需要的cpu核数和worker总共剩余核数之和中最小的
+    // 防止超过当前可用的cpu核数
     var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
 
     /** Return whether the specified worker can launch an executor for this app. */
     def canLaunchExecutor(pos: Int): Boolean = {
+      // 判断当前需要分配的cpu核数是否大于或者等于每个executor所需要的cpu核数，比如总共只能分配8核，但是
+      // 每个executor所需要的cpu核数是12，那么就不能发起executor了，因为资源不够用
       val keepScheduling = coresToAssign >= minCoresPerExecutor
       val enoughCores = usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor
 
@@ -648,7 +657,7 @@ private[deploy] class Master(
         //TODO 下面四个条件同时满足才可以调度：
         //（1）分配的core数大于每个executor的最小数
         //（2）该worker上的空闲的core是否满足需求
-        //（3）该worker是否有足够的剩余mem
+        //（3）该worker是否有足够的剩余Memory
         //（4）application的executor限制
         keepScheduling && enoughCores && enoughMemory && underLimit
       } else {
@@ -662,11 +671,16 @@ private[deploy] class Master(
     // Keep launching executors until no more workers can accommodate any
     // more executors, or if we have reached this application's limits
     var freeWorkers = (0 until numUsable).filter(canLaunchExecutor)
+    // 遍历每一个空闲的worker
     while (freeWorkers.nonEmpty) {
+      // 检测当前worker是否能够发起executor
       freeWorkers.foreach { pos =>
         var keepScheduling = true
+        //TODO 对当前work不停的循环,除非spreadOutApps=true
         while (keepScheduling && canLaunchExecutor(pos)) {
+          // 需要分配的核数减去每个executor所需要的最小核数
           coresToAssign -= minCoresPerExecutor
+          // 对应的worker节点需要分配的cpu核数加上要启动该executor所需要的最小CPU核数
           assignedCores(pos) += minCoresPerExecutor
 
           // If we are launching one executor per worker, then every iteration assigns 1 core
@@ -681,11 +695,13 @@ private[deploy] class Master(
           // many workers as possible. If we are not spreading out, then we should keep
           // scheduling executors on this worker until we use all of its resources.
           // Otherwise, just move on to the next worker.
+          // TODO 如果需要将executor分配到更多的worker，那么就不再从当前worker节点继续分配，而是从下一个worker上继续分配
           if (spreadOutApps) {
             keepScheduling = false
           }
         }
       }
+      // 因为进行了一次分配，需要再次从可用的worker节点中过滤可用的worker节点
       freeWorkers = freeWorkers.filter(canLaunchExecutor)
     }
     assignedCores
@@ -698,14 +714,25 @@ private[deploy] class Master(
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
     //TODO waitingApps是一个arrayBuffer，依次调度队列里的app
+    //TODO oresLeft=app请求的核数-已经分配给executor的核数的和
     for (app <- waitingApps if app.coresLeft > 0) {
+      // 每一个executor所需要的核数
       val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
       // Filter out workers that don't have enough resources to launch an executor
       val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
         .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
           worker.coresFree >= coresPerExecutor.getOrElse(1))
         .sortBy(_.coresFree).reverse
+
       //TODO 调度worker上的executor，spreadoutapps表示将application平均分配到可用的worker上去
+      //TODO spreadOut 平均分配算法
+      // 在可用的worker上调度executor，启动executor有两种算法模式：
+      // 一：将应用程序尽可能多的分配到不同的worker上(spreadOutApps =true)
+      // 二：和第一种相反，分配到尽可能少的worker上，通常用于计算密集型；
+      // 每一个executor所需要的核数是可以配置的，一般来讲如果worker有足够的内存和CPU核数，同一个应用程序就可以
+      // 在该worker启动多个executors；否则就不能再启动新的executor了，则需要到其他worker上去分配executor了
+
+      //每个worker节点分配到的cpu核数(16,16,16,16)  通过index确定是哪个work
       val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
       // TODO Now that we've decided how many cores to allocate on each worker, let's allocate them
@@ -735,9 +762,11 @@ private[deploy] class Master(
     // If the number of cores per executor is specified, we divide the cores assigned
     // to this worker evenly among the executors with no remainder.
     // Otherwise, we launch a single executor that grabs all the assignedCores on this worker.
+    //TODO 获取该worker应该有多少个executor
     val numExecutors = coresPerExecutor.map {
       assignedCores / _
     }.getOrElse(1)
+    // 获取每一个executor应该分配的核数，如果没有指定则使用计算的应该分配的核数
     val coresToAssign = coresPerExecutor.getOrElse(assignedCores)
     for (i <- 1 to numExecutors) {
       val exec = app.addExecutor(worker, coresToAssign)
@@ -758,6 +787,7 @@ private[deploy] class Master(
       return
     }
     // Drivers take strict precedence over executors
+    //TODO 每一个应用(任务)对应一个driver. 打乱work有利于让driver均匀分配在不同的work上
     val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
     val numWorkersAlive = shuffledAliveWorkers.size
     var curPos = 0
@@ -771,21 +801,23 @@ private[deploy] class Master(
       var launched = false
       var numWorkersVisited = 0
       //TODO 只要还有活着的work就继续遍历,当前这个driver还没有被启动,就是launched为false
+      //TODO 只要driver启动成功一次了,后面的work就不用循环了.
       while (numWorkersVisited < numWorkersAlive && !launched) {
         val worker = shuffledAliveWorkers(curPos)
         numWorkersVisited += 1
-        //TODO 内存够,cpu够,才会启动driver.
+        //TODO work上的内存,cpu>启动driver所需的内存,cpu,才会启动driver.
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
-          //TODO
+          //TODO 发送消息在work上启动driver
           launchDriver(worker, driver)
           //从缓存中移除
           waitingDrivers -= driver
           launched = true
         }
+        //指正移到下一个work
         curPos = (curPos + 1) % numWorkersAlive
       }
     }
-    //TODO
+    //TODO 在work上启动executor
     startExecutorsOnWorkers()
   }
 
@@ -797,6 +829,7 @@ private[deploy] class Master(
       exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory))
     // TODO application 包含 clientEndpoint,driverEndPoint
     // TODO clientEndpoint与master通信
+
     //TODO executor会反向注册到driverEndPoint上进行通信
     //TODO master->clientEndPoint 源码的命名有歧义,其实他是发给clientEndPoint的.(在APPClient里面
     //TODO 可以知道对应接受ExecutorAdded的代码)告诉它已经被启动(Added)

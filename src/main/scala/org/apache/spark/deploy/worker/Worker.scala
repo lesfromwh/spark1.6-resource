@@ -478,6 +478,7 @@ private[deploy] class Worker(
           manager.start()
           coresUsed += cores_
           memoryUsed += memory_
+          //TODO
           sendToMaster(ExecutorStateChanged(appId, execId, manager.state, None, None))
         } catch {
           case e: Exception => {
@@ -492,7 +493,7 @@ private[deploy] class Worker(
         }
       }
 
-      //executor->work
+      //TODO executor->work
     case executorStateChanged @ ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
       handleExecutorStateChanged(executorStateChanged)
 
@@ -510,7 +511,7 @@ private[deploy] class Worker(
         }
       }
 
-      //TODO
+      //TODO master->work spark on yarn cluster 模式下  在work上启动driver
     case LaunchDriver(driverId, driverDesc) => {
       logInfo(s"Asked to launch driver $driverId")
       val driver = new DriverRunner(
@@ -654,8 +655,9 @@ private[deploy] class Worker(
       case _ =>
         logDebug(s"Driver $driverId changed state to $state")
     }
-    //TODO 告诉master
+    //TODO driver执行完以后,driver线程->work,然后->master
     sendToMaster(driverStateChanged)
+    //移除driver 标记为已经完成.
     val driver = drivers.remove(driverId).get
     finishedDrivers(driverId) = driver
     trimFinishedDriversIfNecessary()
