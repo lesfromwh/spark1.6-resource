@@ -158,10 +158,13 @@ private[spark] class TaskSchedulerImpl(
     waitBackendReady()
   }
 
+
+  //TODO 提交任务的入口
   override def submitTasks(taskSet: TaskSet) {
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
+      //TODO
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       val stage = taskSet.stageId
       val stageTaskSets =
@@ -191,6 +194,7 @@ private[spark] class TaskSchedulerImpl(
       }
       hasReceivedTask = true
     }
+    //TODO sparkContext中创建taskScheduler的时候,创建了SparkDeploySchedulerBackend并初始给了taskSchedulerImpl
     backend.reviveOffers()
   }
 
@@ -278,6 +282,7 @@ private[spark] class TaskSchedulerImpl(
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
    */
+  //TODO
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
     // Mark each slave as alive and remember its hostname
     // Also track if new executor is added
@@ -300,6 +305,7 @@ private[spark] class TaskSchedulerImpl(
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
+    //TODO
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
@@ -312,6 +318,14 @@ private[spark] class TaskSchedulerImpl(
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
+    //TODO 任务分配算法
+    //TODO 双重循环遍历所有taskset,已经每一种本地化级别
+    //本地化级别分为几种 process_local 进行本地化,rdd的partition和task,进入一个executor类,速度很快
+    //node_local也就是说rdd的partition和task,不在一个executor中,不在一个进程,但是在一个work节点上
+    //no_pref 无
+    // rack_local 机架本地化,至少rdd的partition和task在一个机架山
+    //any 任意的本地化级别.
+    //TODO 从最好的本地化级别开始
     var launchedTask = false
     for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
       do {
