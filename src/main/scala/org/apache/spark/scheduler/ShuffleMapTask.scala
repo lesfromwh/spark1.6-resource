@@ -58,8 +58,15 @@ private[spark] class ShuffleMapTask(
     if (locs == null) Nil else locs.toSet.toSeq
   }
 
+  //TODO 有返回值MapStatus
   override def runTask(context: TaskContext): MapStatus = {
     // Deserialize the RDD using the broadcast variable.
+    /**
+      * 对task要处理的rdd相关的数据,做一些反序列化操作
+      * 这个rdd是怎么拿到的呢. 多个task运行在多个executor中,都是并行运行或并发运行.可能不在一个地方.
+      * 一个stage包含一个或多个task(相当于流水线)
+      * 这里通过广播拿到rdd
+      */
     val deserializeStartTime = System.currentTimeMillis()
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val (rdd, dep) = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
@@ -71,11 +78,12 @@ private[spark] class ShuffleMapTask(
     try {
       val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
-      //TODO 重要
+      //TODO 核心逻辑
       //调用rdd.iterator,并且传入了,当前task要处理哪个partition
       //执行完以后返回的数据,通过write,经过hashpartiton进行分区之后,写入对应的分区
       //MapStatus封装了返回结果
       //blockmanager是spark底层的内存.
+      //TODO hashShuffleWriter
       writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       writer.stop(success = true).get
     } catch {

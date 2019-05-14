@@ -52,8 +52,14 @@ private[spark] class HashShuffleWriter[K, V](
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
+    //TODO 判断是否需要在map端本地进行聚合
+    //这里的话,如果是reduceByKey这种操作.它的dep.aggregator.isDefined就是true
+    //包括dep.mapSideCombine也是true
+    //那么就会进行map端的本地聚合
     val iter = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
+        //TODO 这里就会进行本地聚合
+        //例如 (hello,1) (hello,1) 聚合成(hello,2)
         dep.aggregator.get.combineValuesByKey(records, context)
       } else {
         records
@@ -63,8 +69,12 @@ private[spark] class HashShuffleWriter[K, V](
       records
     }
 
+    //如果要本地聚合,那么像本地聚合,然后遍历数据.
+    //对每个数据,调用partitioner,默认是hashPartitioner,生成bucketId
+    //也就是决定了,每一份数据,要写入哪个bucket中.
     for (elem <- iter) {
       val bucketId = dep.partitioner.getPartition(elem._1)
+      //
       shuffle.writers(bucketId).write(elem._1, elem._2)
     }
   }

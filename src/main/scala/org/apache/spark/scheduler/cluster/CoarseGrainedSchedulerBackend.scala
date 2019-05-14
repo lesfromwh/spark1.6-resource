@@ -103,8 +103,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
     }
 
+    //TODO
     override def receive: PartialFunction[Any, Unit] = {
+      //TODO 处理task执行结束后的事件
       case StatusUpdate(executorId, taskId, state, data) =>
+        //TODO
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {

@@ -344,6 +344,8 @@ private[spark] class TaskSchedulerImpl(
     var failedExecutor: Option[String] = None
     synchronized {
       try {
+        //TODO 如果task lost
+        //TODO 实际生产中 task也会lost掉
         if (state == TaskState.LOST && taskIdToExecutorId.contains(tid)) {
           // We lost this entire executor, so remember that it's gone
           val execId = taskIdToExecutorId(tid)

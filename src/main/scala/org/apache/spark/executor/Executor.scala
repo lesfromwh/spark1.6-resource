@@ -209,6 +209,7 @@ private[spark] class Executor(
       try {
         //TODO 进行反序列化
         val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
+        //TODO
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
         task.setTaskMemoryManager(taskMemoryManager)
@@ -227,10 +228,11 @@ private[spark] class Executor(
         env.mapOutputTracker.updateEpoch(task.epoch)
 
         // Run the actual task and measure its runtime.
-        //TODO
+        //TODO task开始时间
         taskStart = System.currentTimeMillis()
         var threwException = true
         val (value, accumUpdates) = try {
+          //TODO
           val res = task.run(
             taskAttemptId = taskId,
             attemptNumber = attemptNumber,
@@ -260,6 +262,7 @@ private[spark] class Executor(
             }
           }
         }
+        //task 结束时间
         val taskFinish = System.currentTimeMillis()
 
         // If the task has been killed, let's fail it.
@@ -271,7 +274,7 @@ private[spark] class Executor(
         val beforeSerialization = System.currentTimeMillis()
         val valueBytes = resultSer.serialize(value)
         val afterSerialization = System.currentTimeMillis()
-        //这儿,是计算出task相关的一些metrics,就是统计信息.
+        //TODO 这儿,是计算出task相关的一些metrics,就是统计信息. 显示在sparkUI上
         //那么包括运行多长时间,反序列化消费了多长时间.
         for (m <- task.metrics) {
           // Deserialization happens in two parts: first, we deserialize a Task object, which
@@ -427,6 +430,7 @@ private[spark] class Executor(
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
         // Fetch file with useCache mode, close cache for local mode.
+        //TODO 拉取文件
         Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
           env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
         currentFiles(name) = timestamp

@@ -265,9 +265,10 @@ abstract class RDD[T: ClassTag](
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
     if (storageLevel != StorageLevel.NONE) {
-      //TODO cacheManager先放着
+      //TODO
       SparkEnv.get.cacheManager.getOrCompute(this, split, context, storageLevel)
     } else {
+      //TODO
       computeOrReadCheckpoint(split, context)
     }
   }
