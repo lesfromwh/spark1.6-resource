@@ -83,7 +83,7 @@ private[spark] class ShuffleMapTask(
       //执行完以后返回的数据,通过write,经过hashpartiton进行分区之后,写入对应的分区
       //MapStatus封装了返回结果
       //blockmanager是spark底层的内存.
-      //TODO hashShuffleWriter
+      //TODO   wordCount的map操作？
       writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       writer.stop(success = true).get
     } catch {

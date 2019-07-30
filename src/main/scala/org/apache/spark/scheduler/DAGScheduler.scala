@@ -597,6 +597,7 @@ class DAGScheduler(
     assert(partitions.size > 0)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
+    //TODO 任务提交
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions.toArray, callSite, waiter,
       SerializationUtils.clone(properties)))
@@ -878,9 +879,10 @@ class DAGScheduler(
     finalStage.setActiveJob(job)
     val stageIds = jobIdToStageIds(jobId).toArray
     val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
+    //TODO
     listenerBus.post(
       SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
-    //TODO
+    //TODO (里面进行划分算法)
     submitStage(finalStage)
 
     //TODO 提交等待的stage
@@ -945,7 +947,7 @@ class DAGScheduler(
         //TODO 如果找不到父依赖 说明他是第一个stage 提交它
         if (missing.isEmpty) {
           logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
-          //TODO 提交task
+          //TODO 提交task 重点~!!!
           submitMissingTasks(stage, jobId.get)
         } else {
           for (parent <- missing) {
@@ -1640,6 +1642,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   /**
    * The main event loop of the DAG scheduler.
    */
+  //TODO
   override def onReceive(event: DAGSchedulerEvent): Unit = {
     val timerContext = timer.time()
     try {

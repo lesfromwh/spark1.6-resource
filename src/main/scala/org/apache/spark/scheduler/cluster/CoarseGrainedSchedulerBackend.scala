@@ -138,7 +138,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     //TODO send用receive接受 ask用receiveAndReply接受
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
 
-      //TODO executor(CoarseGrainedExecutorBackend)-> driver executor启动以后反向注册
+      //TODO 重要 executor(CoarseGrainedExecutorBackend)-> driver executor启动以后反向注册
       case RegisterExecutor(executorId, executorRef, hostPort, cores, logUrls) =>
         if (executorDataMap.contains(executorId)) {
           context.reply(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
